@@ -76,7 +76,30 @@ $("#transactions").innerHTML=tx.length?tx.map(t=>`<article class="tx row"><div><
 
 function openCategory(id=""){const c=state.categories.find(x=>x.id===id);$("#categoryForm").reset();$("#categoryId").value=c?.id||"";$("#categoryName").value=c?.name||"";$("#categoryLimit").value=c?(c.limitCents/100).toFixed(2):"";$("#categoryFrequency").value=c?.frequency||"weekly";$("#categoryTitle").textContent=c?"Edit category":"New category";$("#categoryDialog").showModal()}
 function fillCategorySelect(selected=""){const cats=state.categories.filter(c=>!c.archivedAt||c.id===selected);$("#spendCategory").innerHTML=cats.sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${c.id}">${esc(c.name)}${c.archivedAt?" (deleted)":""}</option>`).join("")}
-function openSpend(id="",cat=""){const t=state.transactions.find(x=>x.id===id),locked=Boolean(cat&&!t),selected=t?.categoryId||cat||activeCategories()[0]?.id||"",selectedCat=state.categories.find(c=>c.id===selected);$("#spendForm").reset();fillCategorySelect(selected);$("#spendId").value=t?.id||"";$("#spendCategory").value=selected;$("#spendCategory").hidden=locked;$("#spendCategoryLocked").hidden=!locked;$("#spendCategoryLocked").textContent=selectedCat?.name||"";$("#spendAmount").value=t?(t.amountCents/100).toFixed(2):"";$("#spendDate").value=t?.date||$("#asOf").value||todayISO();$("#spendNote").value=t?.note||"";$("#spendTitle").textContent=t?"Edit spending":"Add spending";$("#spendDialog").showModal()}
+
+function openSpend(id="",cat=""){
+    const t=state.transactions.find(x=>x.id===id),
+          locked=Boolean(cat && !t),
+          selected=t?.categoryId || cat || activeCategories()[0]?.id || "";
+
+    $("#spendForm").reset();
+    fillCategorySelect(selected);
+
+    $("#spendId").value=t?.id || "";
+    $("#spendCategory").value=selected;
+
+    // When Add spend is clicked on a category card,
+    // lock the category so it cannot be changed.
+    $("#spendCategory").disabled = locked;
+
+    $("#spendAmount").value=t?(t.amountCents/100).toFixed(2):"";
+    $("#spendDate").value=t?.date || $("#asOf").value || todayISO();
+    $("#spendNote").value=t?.note || "";
+    $("#spendTitle").textContent=t ? "Edit spending" : "Add spending";
+
+    $("#spendDialog").showModal();
+}
+
 
 $("#categoryForm").onsubmit=e=>{e.preventDefault();const id=$("#categoryId").value,name=$("#categoryName").value.trim(),limit=parseMoney($("#categoryLimit").value),frequency=$("#categoryFrequency").value;if(!limit)return showAlert("Enter a valid positive limit with at most two decimal places.");if(activeCategories().some(c=>c.id!==id&&c.name.toLowerCase()===name.toLowerCase()))return showAlert("Category names must be unique.");if(id)Object.assign(state.categories.find(c=>c.id===id),{name,limitCents:limit,frequency,updatedAt:new Date().toISOString()});else state.categories.push({id:uid(),name,limitCents:limit,frequency,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),archivedAt:null});showAlert("");save();$("#categoryDialog").close();render()};
 
