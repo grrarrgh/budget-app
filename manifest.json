@@ -6,7 +6,7 @@
   "theme_color": "#3157d5",
   "icons": [
     {
-      "src": "PocketBudgetIcon.png",
+      "src": "./PocketBudgetIcon.png",
       "sizes": "1024x1024",
       "type": "image/png"
     }
