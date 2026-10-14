@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Budget Pocket</title>
+<style>
+:root{font:16px system-ui,sans-serif;color:#172033;background:#f5f7fb;--blue:#3157d5;--red:#b42318;--green:#138a52}
+*{box-sizing:border-box}body{margin:0}header,main{max-width:900px;margin:auto;padding:16px}header{display:flex;justify-content:space-between;align-items:center}h1{font-size:1.45rem;margin:0}h2{font-size:1.1rem;margin:24px 0 10px}.muted{color:#667085}.toolbar,.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:end}.toolbar{background:white;padding:12px;border-radius:14px}.actions{margin-top:12px}label{display:grid;gap:5px;font-weight:650}input,select,button,.button{font:inherit;min-height:44px;border-radius:10px;border:1px solid #cbd3df;padding:9px 12px;background:white;color:inherit}button,.button{cursor:pointer;font-weight:700;text-align:center}.primary{background:var(--blue);color:white;border-color:var(--blue)}.danger{color:var(--red)}.grid{display:grid;gap:12px}.card{background:white;border:2px solid transparent;border-radius:16px;padding:16px;box-shadow:0 2px 10px #18223010}.card.over{border-color:#f04438;background:#fff7f6}.row{display:flex;justify-content:space-between;gap:12px;align-items:center}.card h3{margin:0}.amount{font-size:1.55rem;font-weight:800}.overText{color:var(--red);font-weight:800}.okText{color:var(--green);font-weight:750}.bar{height:10px;background:#e9edf3;border-radius:999px;overflow:hidden;margin:12px 0}.bar>span{display:block;height:100%;background:var(--green)}.over .bar>span{background:var(--red)}.mini{font-size:.88rem}.tx{background:white;padding:12px;border-radius:12px;margin:8px 0}.tx p{margin:3px 0}.empty{padding:22px;background:white;border-radius:14px;text-align:center}.alert{padding:12px;border-radius:10px;background:#fff0ee;color:var(--red);margin-bottom:12px}dialog{border:0;border-radius:16px;width:min(92vw,460px);padding:0;box-shadow:0 18px 60px #0004}dialog::backdrop{background:#11182799}form{padding:18px;display:grid;gap:12px}form h2{margin:0}.formActions{display:flex;justify-content:flex-end;gap:8px}.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}@media(min-width:640px){.grid{grid-template-columns:repeat(2,1fr)}header,main{padding:22px}}
+</style>
+</head>
+<body>
+<header><h1>Budget Pocket</h1><span class="muted mini">AUD · local only</span></header>
+<main>
+<div id="alert" class="alert" role="alert" hidden></div>
+<section class="toolbar">
+<label>Period containing <input id="asOf" type="date"></label>
+<button id="today">Today</button>
+</section>
+<section class="actions">
+<button id="newCategory" class="primary">New category</button>
+<button id="newSpend">Add spending</button>
+<button id="exportBtn">Export backup</button>
+<label class="button">Import backup<input id="importFile" class="sr" type="file" accept="application/json,.json"></label>
+</section>
+<h2>Budgets</h2><section id="cards" class="grid" aria-live="polite"></section>
+<h2>Transactions</h2><section id="transactions"></section>
+</main>
+
+<dialog id="categoryDialog"><form id="categoryForm">
+<h2 id="categoryTitle">Category</h2>
+<input id="categoryId" type="hidden">
+<label>Name <input id="categoryName" maxlength="40" required></label>
+<label>Limit (AUD) <input id="categoryLimit" type="number" inputmode="decimal" min="0.01" max="1000000" step="0.01" required></label>
+<label>Frequency <select id="categoryFrequency"><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></label>
+<div class="formActions"><button type="button" data-close>Cancel</button><button class="primary">Save</button></div>
+</form></dialog>
+
+<dialog id="spendDialog"><form id="spendForm">
+<h2 id="spendTitle">Spending</h2>
+<input id="spendId" type="hidden">
+<label>Category <select id="spendCategory" required></select></label>
+<label>Amount (AUD) <input id="spendAmount" type="number" inputmode="decimal" min="0.01" max="1000000" step="0.01" required></label>
+<label>Date <input id="spendDate" type="date" required></label>
+<label>Note (optional) <input id="spendNote" maxlength="120"></label>
+<div class="formActions"><button type="button" data-close>Cancel</button><button class="primary">Save</button></div>
+</form></dialog>
+
+<script>
+"use strict";
+const KEY="budget-pocket.v1",MAX_CENTS=100000000,WEEK_START=1;
+const $=s=>document.querySelector(s),money=new Intl.NumberFormat("en-AU",{style:"currency",currency:"AUD"});
+const blank=()=>({version:1,categories:[],transactions:[]});
+let startupError="",canStore=storageAvailable(),state=load();
+
+function storageAvailable(){try{localStorage.setItem(KEY+".test","1");localStorage.removeItem(KEY+".test");return true}catch{return false}}
+function load(){if(!canStore)return blank();try{return validate(JSON.parse(localStorage.getItem(KEY)||"null"))}catch{startupError="Stored data could not be read. Import a known-good backup.";return blank()}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state));return true}catch{showAlert("Could not save locally. Export a backup and check browser storage settings.");return false}}
+function showAlert(text){const e=$("#alert");e.textContent=text;e.hidden=!text}
+function uid(){if(crypto?.randomUUID)return crypto.randomUUID();const a=new Uint32Array(4);crypto.getRandomValues(a);return [...a].map(x=>x.toString(16)).join("-")}
+function esc(v){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function iso(d){return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
+function todayISO(){return iso(new Date())}
+function localDate(s){const[y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)}
+function validDate(s){if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;const[y,m,d]=s.split("-").map(Number),x=new Date(y,m-1,d);return x.getFullYear()===y&&x.getMonth()===m-1&&x.getDate()===d}
+function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x}
+function bounds(freq,s){const d=localDate(s);let start,end;if(freq==="weekly"){start=addDays(d,-((d.getDay()-WEEK_START+7)%7));end=addDays(start,7)}else{start=new Date(d.getFullYear(),d.getMonth(),1);end=new Date(d.getFullYear(),d.getMonth()+1,1)}const f=new Intl.DateTimeFormat("en-AU",{day:"numeric",month:"short",year:"numeric"});return{start:iso(start),end:iso(end),label:freq==="weekly"?`${f.format(start)} – ${f.format(addDays(end,-1))}`:new Intl.DateTimeFormat("en-AU",{month:"long",year:"numeric"}).format(start)}}
+function parseMoney(v){if(!/^\d+(\.\d{1,2})?$/.test(String(v).trim()))return null;const[w,f=""]=String(v).split("."),c=Number(w)*100+Number((f+"00").slice(0,2));return Number.isSafeInteger(c)&&c>0&&c<=MAX_CENTS?c:null}
+function activeCategories(){return state.categories.filter(c=>!c.archivedAt).sort((a,b)=>a.name.localeCompare(b.name))}
+function categoryName(t){return state.categories.find(c=>c.id===t.categoryId)?.name||t.categoryName||"Deleted category"}
+
+function render(){const asOf=$("#asOf").value||todayISO(),cats=activeCategories();
+$("#cards").innerHTML=cats.length?cats.map(c=>{const b=bounds(c.frequency,asOf),spent=state.transactions.filter(t=>t.categoryId===c.id&&t.date>=b.start&&t.date<b.end).reduce((n,t)=>n+t.amountCents,0),remaining=c.limitCents-spent,over=remaining<0,pct=Math.min(100,Math.round(spent/c.limitCents*100));return`<article class="card ${over?"over":""}"><div class="row"><div><h3>${esc(c.name)}</h3><span class="muted mini">${esc(b.label)} · ${c.frequency}</span></div><strong class="${over?"overText":"okText"}">${over?"OVER":"ON TRACK"}</strong></div><p><span class="amount">${over?`Over by ${money.format(-remaining/100)}`:money.format(remaining/100)}</span> ${over?"":"left"}</p><div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="${c.limitCents}" aria-valuenow="${spent}"><span style="width:${pct}%"></span></div><p class="mini">Spent ${money.format(spent/100)} of ${money.format(c.limitCents/100)}</p><div class="actions"><button data-add="${c.id}">Add spend</button><button data-edit-cat="${c.id}">Edit</button><button class="danger" data-delete-cat="${c.id}">Delete</button></div></article>`}).join(""):`<div class="empty">Create a category to start budgeting.</div>`;
+const tx=[...state.transactions].sort((a,b)=>b.date.localeCompare(a.date)||b.createdAt.localeCompare(a.createdAt));
+$("#transactions").innerHTML=tx.length?tx.map(t=>`<article class="tx row"><div><strong>${money.format(t.amountCents/100)} · ${esc(categoryName(t))}</strong><p class="muted mini">${esc(t.date)}${t.note?` · ${esc(t.note)}`:""}</p></div><div><button data-edit-tx="${t.id}">Edit</button> <button class="danger" data-delete-tx="${t.id}">Delete</button></div></article>`).join(""):`<div class="empty">No spending entered yet.</div>`}
+
+function openCategory(id=""){const c=state.categories.find(x=>x.id===id);$("#categoryForm").reset();$("#categoryId").value=c?.id||"";$("#categoryName").value=c?.name||"";$("#categoryLimit").value=c?(c.limitCents/100).toFixed(2):"";$("#categoryFrequency").value=c?.frequency||"weekly";$("#categoryTitle").textContent=c?"Edit category":"New category";$("#categoryDialog").showModal()}
+function fillCategorySelect(selected=""){const cats=state.categories.filter(c=>!c.archivedAt||c.id===selected);$("#spendCategory").innerHTML=cats.sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${c.id}">${esc(c.name)}${c.archivedAt?" (deleted)":""}</option>`).join("")}
+function openSpend(id="",cat=""){const t=state.transactions.find(x=>x.id===id);$("#spendForm").reset();fillCategorySelect(t?.categoryId||cat);$("#spendId").value=t?.id||"";$("#spendCategory").value=t?.categoryId||cat||activeCategories()[0]?.id||"";$("#spendAmount").value=t?(t.amountCents/100).toFixed(2):"";$("#spendDate").value=t?.date||$("#asOf").value||todayISO();$("#spendNote").value=t?.note||"";$("#spendTitle").textContent=t?"Edit spending":"Add spending";$("#spendDialog").showModal()}
+
+$("#categoryForm").onsubmit=e=>{e.preventDefault();const id=$("#categoryId").value,name=$("#categoryName").value.trim(),limit=parseMoney($("#categoryLimit").value),frequency=$("#categoryFrequency").value;if(!limit)return showAlert("Enter a valid positive limit with at most two decimal places.");if(activeCategories().some(c=>c.id!==id&&c.name.toLowerCase()===name.toLowerCase()))return showAlert("Category names must be unique.");if(id)Object.assign(state.categories.find(c=>c.id===id),{name,limitCents:limit,frequency,updatedAt:new Date().toISOString()});else state.categories.push({id:uid(),name,limitCents:limit,frequency,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),archivedAt:null});showAlert("");save();$("#categoryDialog").close();render()};
+
+$("#spendForm").onsubmit=e=>{e.preventDefault();const id=$("#spendId").value,categoryId=$("#spendCategory").value,amount=parseMoney($("#spendAmount").value),date=$("#spendDate").value,note=$("#spendNote").value.trim(),cat=state.categories.find(c=>c.id===categoryId);if(!cat||!amount||!validDate(date))return showAlert("Check the category, amount and date.");if(id)Object.assign(state.transactions.find(t=>t.id===id),{categoryId,categoryName:cat.name,amountCents:amount,date,note,updatedAt:new Date().toISOString()});else state.transactions.push({id:uid(),categoryId,categoryName:cat.name,amountCents:amount,date,note,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});showAlert("");save();$("#spendDialog").close();render()};
+
+$("#cards").onclick=e=>{const b=e.target.closest("button");if(!b)return;if(b.dataset.add)openSpend("",b.dataset.add);if(b.dataset.editCat)openCategory(b.dataset.editCat);if(b.dataset.deleteCat&&confirm("Delete this category? Its transactions will remain in history.")){state.categories.find(c=>c.id===b.dataset.deleteCat).archivedAt=new Date().toISOString();save();render()}};
+$("#transactions").onclick=e=>{const b=e.target.closest("button");if(!b)return;if(b.dataset.editTx)openSpend(b.dataset.editTx);if(b.dataset.deleteTx&&confirm("Delete this spending entry?")){state.transactions=state.transactions.filter(t=>t.id!==b.dataset.deleteTx);save();render()}};
+$("#newCategory").onclick=()=>openCategory();$("#newSpend").onclick=()=>activeCategories().length?openSpend():openCategory();$("#today").onclick=()=>{$("#asOf").value=todayISO();render()};$("#asOf").onchange=render;document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>b.closest("dialog").close());
+
+$("#exportBtn").onclick=()=>{const data={app:"budget-pocket",version:1,exportedAt:new Date().toISOString(),data:state},blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`budget-pocket-${todayISO()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+$("#importFile").onchange=async e=>{const file=e.target.files[0];e.target.value="";if(!file)return;if(file.size>2000000)return showAlert("Backup is too large.");try{const next=validate(JSON.parse(await readText(file)));if(!confirm("Replace all current data with this backup?"))return;const old=state;state=next;if(!save()){state=old;return}showAlert("");render()}catch(err){showAlert("Import failed: "+err.message)}};
+function readText(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(new Error("Could not read file"));r.readAsText(file)})}
+function validate(raw){if(!raw)return blank();const x=raw.app==="budget-pocket"?raw.data:raw;if(!x||!Array.isArray(x.categories)||!Array.isArray(x.transactions))throw new Error("Not a Budget Pocket backup");if(x.categories.length>200||x.transactions.length>10000)throw new Error("Too many records");const ids=new Set(),names=new Set(),categories=x.categories.map(c=>{const name=String(c.name||"").trim(),key=name.toLowerCase(),archived=Boolean(c.archivedAt);if(!c.id||ids.has(c.id)||!name||(!archived&&names.has(key))||name.length>40||!Number.isSafeInteger(c.limitCents)||c.limitCents<1||c.limitCents>MAX_CENTS||!["weekly","monthly"].includes(c.frequency))throw new Error("Invalid category data");ids.add(c.id);if(!archived)names.add(key);return{id:String(c.id),name,limitCents:c.limitCents,frequency:c.frequency,createdAt:String(c.createdAt||""),updatedAt:String(c.updatedAt||""),archivedAt:c.archivedAt?String(c.archivedAt):null}}),txids=new Set(),transactions=x.transactions.map(t=>{const note=String(t.note||"");if(!t.id||txids.has(t.id)||!ids.has(t.categoryId)||!Number.isSafeInteger(t.amountCents)||t.amountCents<1||t.amountCents>MAX_CENTS||!validDate(t.date)||note.length>120)throw new Error("Invalid transaction data");txids.add(t.id);return{id:String(t.id),categoryId:String(t.categoryId),categoryName:String(t.categoryName||""),amountCents:t.amountCents,date:t.date,note,createdAt:String(t.createdAt||""),updatedAt:String(t.updatedAt||"")}});return{version:1,categories,transactions}}
+
+$("#asOf").value=todayISO();
+if(!canStore)showAlert("Local storage is unavailable. Enable browser storage before entering data.");
+else if(startupError)showAlert(startupError);
+render();
+</script>
+</body>
+</html>
